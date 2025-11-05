@@ -6,7 +6,7 @@ from telethon import TelegramClient, events
 from telethon.tl.functions.contacts import ResolveUsernameRequest  
 from telethon.errors import UsernameNotOccupiedError, UsernameInvalidError  
   
-API_ID = 8934899  
+API_ID = 6825462  
 API_HASH = "3b3cb233c159b6f48798e10c4b5fdc83"  
 BOT_TOKEN = "6741306329:AAG-or3-0oGmr3QJWN-kCC7tYxP7FTLlYgo"  
   
