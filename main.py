@@ -1,115 +1,123 @@
-import asyncio  
-import random  
-import string  
-import re  
-from telethon import TelegramClient, events  
-from telethon.tl.functions.contacts import ResolveUsernameRequest  
-from telethon.errors import UsernameNotOccupiedError, UsernameInvalidError  
-  
-API_ID = 6825462  
-API_HASH = "3b3cb233c159b6f48798e10c4b5fdc83"  
-BOT_TOKEN = "6741306329:AAG-or3-0oGmr3QJWN-kCC7tYxP7FTLlYgo"  
-  
-tele_client = TelegramClient("botyee", API_ID, API_HASH)  
-# المطور الوحيد @RR8R9  
-# لاتعدل الحقوق  
-user_states = {}  
-  
-@tele_client.on(events.NewMessage(pattern=r'^/start$'))  
-async def start_handler(event):  
-    await event.reply("أهلًا بك في بوت فحص وتوليد اليوزرات\n\n-  الأمر /generation لتوليد يوزرات .\n- الأمر /check لفحص اليوزر .")  
-      
-def generate_username_by_pattern(pattern):  
-    letters = string.ascii_lowercase  
-    digits = string.digits  
-    all_chars = letters + digits  
-    result = ""  
-    char_map = {}  
-  
-    for i, char in enumerate(pattern):  
-        if char == '_':  
-            result += '_'  
-            continue  
-        if char not in char_map:  
-            if i == 0:  
-                char_map[char] = random.choice(letters)  
-            else:  
-                char_map[char] = random.choice(all_chars)  
-        result += char_map[char]  
-  
-    return '@' + result  
-  
-def generate_usernames_by_pattern(pattern, count):  
-    usernames = set()  
-    while len(usernames) < count:  
-        usernames.add(generate_username_by_pattern(pattern))  
-    return list(usernames)  
-  
-@tele_client.on(events.NewMessage(pattern=r'^/generation'))  
-async def handle_generation(event):  
-    raw_text = event.raw_text  
-    parts = raw_text.split()  
-    if len(parts) != 2 or not re.match(r"^@[\w_]{3,}$", parts[1]):  
-        await event.reply("أرسل الأمر بهذا الشكل:\n/generation @a_7_k أو @vvcvv")  
-        return  
-    username_pattern = parts[1][1:]   
-    user_states[event.sender_id] = username_pattern  
-    await event.reply("شكد عدد اليوزرات اللي تريد توليدها؟")  
-  
-@tele_client.on(events.NewMessage(pattern=r'^\d+$'))  
-async def handle_count(event):  
-    user_id = event.sender_id  
-    pattern = user_states.get(user_id)  
-    if pattern:  
-        try:  
-            count = int(event.raw_text)  
-            if count > 100:  
-                await event.reply("الحد الأقصى للتوليد هو 100.")  
-                return  
-            usernames = generate_usernames_by_pattern(pattern, count)  
-            await event.reply("\n".join(usernames))  
-        except ValueError:  
-            await event.reply("أرسل رقم فقط.")  
-        user_states.pop(user_id, None)  
-  
-@tele_client.on(events.NewMessage(pattern=r'^/check'))  
-async def check_handler(event):  
-    raw_text = event.raw_text  
-    usernames = re.findall(r'@[\w_]{3,}', raw_text)  
-    if not usernames:  
-        await event.reply("أرسل الأمر بهذا الشكل:\n/check @username\nأو أرسل قائمة يوزرات بعد الأمر.")  
-        return  
-  
-    results = []  
-    for username in usernames:  
-        uname = username.replace('@', '')  
-        try:  
-            result = await tele_client(ResolveUsernameRequest(uname))  
-            peer = result.users[0] if result.users else result.chats[0]  
-            if hasattr(peer, 'first_name'):  
-                status = "ربط حساب"  
-            elif hasattr(peer, 'title'):  
-                if peer.broadcast:  
-                    status = "ربط قناة"  
-                else:  
-                    status = "ربط كروب"  
-            else:  
-                status = "مربوط - نوع غير معروف"  
-        except UsernameNotOccupiedError:  
-            status = "متاح"  
-        except UsernameInvalidError:  
-            status = "مبند(منصة)"  
-        except Exception as e:  
-            status = f"خطأ: {str(e)}"  
-  
-        results.append(f"- {username} - ➤ {status}")  
-        await asyncio.sleep(3)    
-  
-    await event.reply("\n".join(results[:50]))  
-  
-async def main():  
-    await tele_client.start(bot_token=BOT_TOKEN)  
-    await tele_client.run_until_disconnected()  
-  
-if __name__ == "__main__":  
+import os
+import requests
+from dotenv import load_dotenv
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+load_dotenv()
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+API = "https://api.alquran.cloud/v1"
+
+# /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "السلام عليكم ✨\n"
+        "أنا بوت القرآن الكريم.\n"
+        "الأوامر:\n"
+        "/surah رقم — لعرض سورة\n"
+        "/ayah س:ع — لعرض آية\n"
+        "/audio رقم — تشغيل السورة\n"
+        "/list — عرض السور"
+    )
+
+# /list
+async def list_surahs(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    res = requests.get(f"{API}/surah").json()
+    surahs = res["data"]
+    txt = ""
+    for s in surahs:
+        txt += f"{s['number']}. {s['name']} — {s['englishName']} ({s['numberOfAyahs']} آية)\n"
+    await update.message.reply_text(txt)
+
+# /surah
+async def surah(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args:
+        return await update.message.reply_text("اكتب: /surah 1")
+
+    number = args[0]
+
+    res = requests.get(f"{API}/surah/{number}/quran-uthmani").json()
+
+    if res["status"] != "OK":
+        return await update.message.reply_text("لم أجد السورة.")
+
+    data = res["data"]
+    name = data["name"]
+    ayahs = data["ayahs"]
+
+    await update.message.reply_text(f"سورة {name} — عدد الآيات: {len(ayahs)}")
+
+    # إرسال الآيات على دفعات
+    chunk = ""
+    count = 0
+    for a in ayahs:
+        chunk += f"{a['numberInSurah']}. {a['text']}\n\n"
+        count += 1
+        if count == 10:
+            await update.message.reply_text(chunk)
+            chunk = ""
+            count = 0
+
+    if chunk:
+        await update.message.reply_text(chunk)
+
+    # زر الصوت
+    audio_url = f"https://api.alquran.cloud/v1/surah/{number}/ar.alafasy"
+    button = InlineKeyboardButton("استمع للسورة 🎧", url=audio_url)
+    await update.message.reply_text("الصوت:", reply_markup=InlineKeyboardMarkup([[button]]))
+
+# /ayah
+async def ayah(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        return await update.message.reply_text("اكتب: /ayah 2:255")
+
+    ref = context.args[0]
+
+    res = requests.get(f"{API}/ayah/{ref}/quran-uthmani").json()
+
+    if res["status"] != "OK":
+        return await update.message.reply_text("لم أجد الآية.")
+
+    data = res["data"]
+    await update.message.reply_text(f"{ref}\n\n{data['text']}")
+
+    # صوت الآية
+    audio_res = requests.get(f"{API}/ayah/{ref}/ar.alafasy").json()
+    audio = audio_res["data"].get("audio")
+
+    if audio:
+        await update.message.reply_audio(audio, caption=f"صوت الآية {ref}")
+
+# /audio
+async def audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        return await update.message.reply_text("استخدم: /audio 1")
+
+    number = context.args[0]
+
+    res = requests.get(f"{API}/surah/{number}/ar.alafasy").json()
+
+    if "data" in res and "audio" in res["data"]:
+        return await update.message.reply_audio(res["data"]["audio"], caption=f"سورة رقم {number}")
+
+    url = f"https://api.alquran.cloud/v1/surah/{number}/ar.alafasy"
+    button = InlineKeyboardButton("استمع للسورة 🎧", url=url)
+    await update.message.reply_text("الصوت:", reply_markup=InlineKeyboardMarkup([[button]]))
+
+
+async def main():
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("list", list_surahs))
+    app.add_handler(CommandHandler("surah", surah))
+    app.add_handler(CommandHandler("ayah", ayah))
+    app.add_handler(CommandHandler("audio", audio))
+
+    print("Bot Started…")
+    await app.run_polling()
+
+if __name__ == "__main__":
+    import asyncio
     asyncio.run(main())
